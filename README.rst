@@ -56,7 +56,6 @@ file could be very simple!
           with:
             github-token: ${{ secrets.GITHUB_TOKEN }}
             circuitpy-version: "9.2.8"
-            
 
 You also have granular control of which directories to compile and zip and the ability to specify which
 files should or should not be compiled and/or zipped as well as the ability to specify a different CircuitPython version.
