@@ -8,10 +8,9 @@ inputs:
   github-token:
     description: 'Your GitHub token, needed to upload the ZIP file'
     required: true
-  mpy-cross-version:
-    description: 'The version of mpy-cross to use'
+  circuitpy-version:
+    description: 'The version of CircuitPython to use'
     required: true
-    default: "8.0.5"
   zip-filename:
     description: 'The name of the ZIP file to attach'
     required: true
@@ -19,7 +18,7 @@ inputs:
   mpy-directory:
     description: >
       The directory to look for files to compile with mpy-cross.  If none
-      is provided, the root directory will be used. This also becomess the
+      is provided, the root directory will be used. This also becomes the
       basis for filepaths in the mpy manifest file, if one is provided.
     required: true
     default: "."
@@ -33,13 +32,13 @@ inputs:
     description: >
       The type of manifest to use for compiling if one is provided. The
       default is "include", but if "exclude" is provided, then all Python
-      files EXCEPT the ones listed will be compuled with mpy-cross.
+      files EXCEPT the ones listed will be compiled with CircuitPython.
     required: true
     default: "include"
   zip-directory:
     description: >
       The directory of files to bundle.  If none is provided, the root
-      directory will be used.  This also becomess the basis for filepaths
+      directory will be used.  This also becomes the basis for filepaths
       in the zip manifest file, if one is provided.
     required: true
     default: "."
@@ -57,6 +56,11 @@ inputs:
       EXCEPT the ones listed will be zipped.
     required: true
     default: "include"
+  compiler-directory:
+    description: >
+      The directory where the mpy-cross compiler will be downloaded.
+    required: true
+    default: "circuitpy-compiler"
 runs:
   using: "composite"
   steps:
@@ -73,14 +77,14 @@ runs:
     - name: Download mpy-cross
       shell: bash
       run: |
-        mkdir mpy-cross
-        cd mpy-cross
-        wget -O mpy-cross https://adafruit-circuit-python.s3.amazonaws.com/bin/mpy-cross/mpy-cross.static-amd64-linux-${{ inputs.mpy-cross-version }}
+        mkdir ${{ inputs.compiler-directory }}
+        cd ${{ inputs.compiler-directory }}
+        wget -O mpy-cross https://adafruit-circuit-python.s3.amazonaws.com/bin/mpy-cross/mpy-cross.static-amd64-linux-${{ inputs.circuitpy-version }}
         chmod +x mpy-cross
     - name: Compile MPY files
       shell: bash
       run: |
-        echo "Compiling using mpy-cross version ${{ inputs.mpy-cross-version }}"
+        echo "Compiling using mpy-cross version ${{ inputs.circuitpy-version }}"
         # Read MPY manifest file contents, if needed
         if [[ "${{ inputs.mpy-manifest-file }}" != "" ]]
         then
@@ -109,7 +113,7 @@ runs:
             mpyresults+=("$outputmpy")
             prempyfile="${{ inputs.mpy-directory }}/$file"
             prempyfiles+=("$prempyfile")
-            mpy-cross/mpy-cross $prempyfile -o $outputmpy
+            ${{ inputs.compiler-directory }}/mpy-cross $prempyfile -o $outputmpy
           fi
         done
 
