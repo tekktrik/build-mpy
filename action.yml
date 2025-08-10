@@ -79,8 +79,45 @@ runs:
       run: |
         mkdir ${{ inputs.compiler-directory }}
         cd ${{ inputs.compiler-directory }}
-        wget -O mpy-cross https://adafruit-circuit-python.s3.amazonaws.com/bin/mpy-cross/mpy-cross.static-amd64-linux-${{ inputs.circuitpy-version }}
-        chmod +x mpy-cross
+        BASE_NEW="https://adafruit-circuit-python.s3.amazonaws.com/bin/mpy-cross/linux-amd64"
+        BASE_OLD="https://adafruit-circuit-python.s3.amazonaws.com/bin/mpy-cross"
+        VER="${{ inputs.circuitpy-version }}"
+        OUT="mpy-cross"
+
+        set -euo pipefail
+
+        # Try modern name in modern folder
+        URL="$BASE_NEW/mpy-cross-linux-amd64-$VER.static"
+        if curl -fsI "$URL" >/dev/null; then
+          curl -fL "$URL" -o "$OUT"
+        else
+          # Try legacy name in legacy folder
+          URL="$BASE_OLD/mpy-cross.static-amd64-linux-$VER"
+          if curl -fsI "$URL" >/dev/null; then
+            curl -fL "$URL" -o "$OUT"
+          else
+            # Last resort: list and match either pattern in linux-amd64, then legacy
+            esc_ver="$(printf '%s' "$VER" | sed -e 's/[.[\\*^$()+?{}|]/\\&/g')"
+
+            for IDX BASE in \
+              "$BASE_NEW/?delimiter=/ $BASE_NEW" \
+              "$BASE_OLD/?delimiter=/ $BASE_OLD"
+            do
+              # If direct URLs fail, list the files in the new place; if no match, list the old place; grab the first filename that starts with your version (new or old pattern); otherwise error out.
+              html="$(curl -fsSL "${IDX%% *}")"
+              cand="$(printf '%s' "$html" | grep -o "mpy-cross-linux-amd64-${esc_ver}[^\"']*\.static" | head -n1)"
+              [ -z "$cand" ] && cand="$(printf '%s' "$html" | grep -o "mpy-cross\.static-amd64-linux-${esc_ver}" | head -n1)"
+              if [ -n "$cand" ]; then
+                curl -fL "${IDX##* }/$cand" -o "$OUT"
+                break
+              fi
+            done
+
+            [ -f "$OUT" ] || { echo "No mpy-cross found for $VER"; exit 1; }
+          fi
+        fi
+
+        chmod +x "$OUT"
     - name: Compile MPY files
       shell: bash
       run: |
