@@ -99,11 +99,13 @@ runs:
             # Last resort: list and match either pattern in linux-amd64, then legacy
             esc_ver="$(printf '%s' "$VER" | sed -e 's/[.[\\*^$()+?{}|]/\\&/g')"
 
-            for IDX BASE in \
+            for IDX in \
               "$BASE_NEW/?delimiter=/ $BASE_NEW" \
               "$BASE_OLD/?delimiter=/ $BASE_OLD"
             do
               # If direct URLs fail, list the files in the new place; if no match, list the old place; grab the first filename that starts with your version (new or old pattern); otherwise error out.
+              BASE="${IDX##* }"
+              IDX="${IDX%% *}"
               html="$(curl -fsSL "${IDX%% *}")"
               cand="$(printf '%s' "$html" | grep -o "mpy-cross-linux-amd64-${esc_ver}[^\"']*\.static" | head -n1)"
               [ -z "$cand" ] && cand="$(printf '%s' "$html" | grep -o "mpy-cross\.static-amd64-linux-${esc_ver}" | head -n1)"
