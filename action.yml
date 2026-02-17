@@ -32,7 +32,7 @@ inputs:
     description: >
       The type of manifest to use for compiling if one is provided. The
       default is "include", but if "exclude" is provided, then all Python
-      files EXCEPT the ones listed will be compiled with CircuitPython.
+      files EXCEPT the ones listed will be compiled with mpy-cross.
     required: true
     default: "include"
   zip-directory:
