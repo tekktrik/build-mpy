@@ -10,8 +10,8 @@ build-mpy
 =========
 
 GitHub Action for building packages of ``.mpy`` files for CircuitPython projects and attaching them to releases
-as ZIP files.  Files other than ``.mpy`` and ``.py`` files will be added to the ZIP file as well.  Note that
-any files named or ``code.py`` are automatically not compiled for convenience.
+as ZIP files. Files other than ``.mpy`` and ``.py`` files will be added to the ZIP file as well. Note that
+``code.py`` and any files excluded via the `mpy-manifest-file` are not compiled.
 
 Inputs
 ======
@@ -19,23 +19,23 @@ Inputs
 ======================= ===================================================================== ==================== =====================================================================
      Argument Name                                 Description                                       Default                              Notes
 ======================= ===================================================================== ==================== =====================================================================
-github-token            Your GitHub token                                                     N/A                  N/A
-circuitpy-tag           The version of CircuitPython to compile for                           N/A                  You can use any valid tag (or branch) from ``adafruit/circuitpython``
+github-token            Your GitHub token                                                     N/A (required)       N/A
+circuitpy-version       The version of CircuitPython to download and use                      N/A (required)       You can specify any version from ``https://adafruit-circuit-python.s3.amazonaws.com/index.html?prefix=bin/mpy-cross``
 zip-filename            The name of the ZIP file that will be attached                        "mpy-release.zip"    N/A
-circuitpython-repo-name The name of the clone CircuitPython repo                              "circuitpython-repo" Change if it conflicts with another file
 mpy-directory           The directory to search for files to compile                          "." (top folder)     Becomes the basis for filepaths in ``mpy-manifest-file``
 mpy-manifest-file       A file with a list of files to compile or exclude                     ""                   If none is given, all files in ``mpy-directory`` are used
 mpy-manifest-type       Whether the files in the manifest file should be included or excluded "include"            N/A
 zip-directory           The directory to add to the ZIP file                                  "." (top folder)     Becomes the basis for filepaths in ``zip-manifest-file``
 zip-manifest-file       A file with a list of files to add to the ZIP file or exclude from it ""                   If none is given, all files in ``zip-directory`` are used
 zip-manifest-type       Whether the files in the manifest file should be included or excluded "include"            N/A
+compiler-directory      The directory where the CircuitPython compiler will be downloaded     "circuitpy-compiler" N/A
 ======================= ===================================================================== ==================== =====================================================================
 
 Examples
 ========
 
 If you have just a repository with files intended for a CircuitPython board, your release
-file could be very simple!  This release CI creates .mpy files for CircuitPython 8.2.0:
+file could be very simple!
 
 .. code-block:: yaml
 
@@ -48,19 +48,20 @@ file could be very simple!  This release CI creates .mpy files for CircuitPython
         runs-on: ubuntu-latest
         steps:
         - name: Checkout the current repo
-          uses: actions/checkout@v3
+          uses: actions/checkout@v4
           with:
             submodules: true
         - name: Run MPY Action
-          uses: adafruit/build-mpy@v1
+          uses: adafruit/build-mpy@v2
           with:
             github-token: ${{ secrets.GITHUB_TOKEN }}
-            circuitpy-tag: "8.2.0"
+            circuitpy-version: "9.2.8"
 
 You also have granular control of which directories to compile and zip and the ability to specify which
-files should or should not be compiled and/or zipped.  For example, if you wanted to compile and zip
-files in a folder named ``microcontroller`` and you wanted to use a manifest file named ``mpy_manifest.txt``
-to specify certain files NOT to compile, you could modify the script above to be:
+files should or should not be compiled and/or zipped as well as the ability to specify a different CircuitPython version.
+For example, if you wanted to compile and zip files in a folder named ``microcontroller`` and you wanted to
+use a manifest file named ``mpy_manifest.txt`` to specify certain files NOT to compile, using CircuitPython
+version ``9.2.8``, you could modify the script above to be:
 
 .. code-block:: yaml
 
@@ -73,14 +74,14 @@ to specify certain files NOT to compile, you could modify the script above to be
         runs-on: ubuntu-latest
         steps:
         - name: Checkout the current repo
-          uses: actions/checkout@v3
+          uses: actions/checkout@v4
           with:
             submodules: true
         - name: Run MPY Action
-          uses: adafruit/build-mpy@v1
+          uses: adafruit/build-mpy@v2
           with:
             github-token: ${{ secrets.GITHUB_TOKEN }}
-            circuitpy-tag: "8.2.0"
+            circuitpy-version: "9.2.8"
             mpy-directory: "microcontroller"
             mpy-manifest-file: "mpy_manifest.txt"
             mpy-manifest-type: "exclude"

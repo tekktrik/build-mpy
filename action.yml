@@ -8,24 +8,17 @@ inputs:
   github-token:
     description: 'Your GitHub token, needed to upload the ZIP file'
     required: true
-  circuitpy-tag:
-    description: 'The CircuitPython version of mpy-cross to build'
+  circuitpy-version:
+    description: 'The version of CircuitPython to use'
     required: true
   zip-filename:
     description: 'The name of the ZIP file to attach'
     required: true
     default: "mpy-release.zip"
-  circuitpython-repo-name:
-    description: >
-      The name for the CircuitPython repo.  The default is 'circuitpython-repo',
-      and there typically isn't any reason to change this unless it conflicts
-      with an existing folder name in your repository.
-    required: true
-    default: 'circuitpython-repo'
   mpy-directory:
     description: >
       The directory to look for files to compile with mpy-cross.  If none
-      is provided, the root directory will be used. This also becomess the
+      is provided, the root directory will be used. This also becomes the
       basis for filepaths in the mpy manifest file, if one is provided.
     required: true
     default: "."
@@ -39,13 +32,13 @@ inputs:
     description: >
       The type of manifest to use for compiling if one is provided. The
       default is "include", but if "exclude" is provided, then all Python
-      files EXCEPT the ones listed will be compuled with mpy-cross.
+      files EXCEPT the ones listed will be compiled with mpy-cross.
     required: true
     default: "include"
   zip-directory:
     description: >
       The directory of files to bundle.  If none is provided, the root
-      directory will be used.  This also becomess the basis for filepaths
+      directory will be used.  This also becomes the basis for filepaths
       in the zip manifest file, if one is provided.
     required: true
     default: "."
@@ -63,6 +56,11 @@ inputs:
       EXCEPT the ones listed will be zipped.
     required: true
     default: "include"
+  compiler-directory:
+    description: >
+      The directory where the mpy-cross compiler will be downloaded.
+    required: true
+    default: "circuitpy-compiler"
 runs:
   using: "composite"
   steps:
@@ -76,39 +74,56 @@ runs:
         sudo apt install build-essential
         sudo add-apt-repository ppa:pybricks/ppa
         sudo apt install git gettext uncrustify
-    - name: Clone adafruit/circuitpython
-      uses: actions/checkout@v3
-      with:
-        repository: adafruit/circuitpython
-        path: ${{ inputs.circuitpython-repo-name }}
-    - name: Enter CircuitPython repo, checkout tag, and update
+    - name: Download mpy-cross
       shell: bash
       run: |
-        function version() {
-          echo "$@" | awk -F. '{ printf("%d%03d%03d%03d\n", $1,$2,$3,$4); }';
-        }
+        mkdir ${{ inputs.compiler-directory }}
+        cd ${{ inputs.compiler-directory }}
+        BASE_NEW="https://adafruit-circuit-python.s3.amazonaws.com/bin/mpy-cross/linux-amd64"
+        BASE_OLD="https://adafruit-circuit-python.s3.amazonaws.com/bin/mpy-cross"
+        VER="${{ inputs.circuitpy-version }}"
+        OUT="mpy-cross"
 
-        cd ${{ inputs.circuitpython-repo-name }}
-        git fetch
-        git checkout ${{ inputs.circuitpy-tag }}
+        set -euo pipefail
 
-        if [ $(version "${{ inputs.circuitpy-tag }}") -ge $(version "8.2.0") ]; then
-          make fetch-all-submodules
+        # Try modern name in modern folder
+        URL="$BASE_NEW/mpy-cross-linux-amd64-$VER.static"
+        if curl -fsI "$URL" >/dev/null; then
+          curl -fL "$URL" -o "$OUT"
         else
-          make fetch-submodules
+          # Try legacy name in legacy folder
+          URL="$BASE_OLD/mpy-cross.static-amd64-linux-$VER"
+          if curl -fsI "$URL" >/dev/null; then
+            curl -fL "$URL" -o "$OUT"
+          else
+            # Last resort: list and match either pattern in linux-amd64, then legacy
+            esc_ver="$(printf '%s' "$VER" | sed -e 's/[.[\\*^$()+?{}|]/\\&/g')"
+
+            for IDX in \
+              "$BASE_NEW/?delimiter=/ $BASE_NEW" \
+              "$BASE_OLD/?delimiter=/ $BASE_OLD"
+            do
+              # If direct URLs fail, list the files in the new place; if no match, list the old place; grab the first filename that starts with your version (new or old pattern); otherwise error out.
+              BASE="${IDX##* }"
+              IDX="${IDX%% *}"
+              html="$(curl -fsSL "${IDX%% *}")"
+              cand="$(printf '%s' "$html" | grep -o "mpy-cross-linux-amd64-${esc_ver}[^\"']*\.static" | head -n1)"
+              [ -z "$cand" ] && cand="$(printf '%s' "$html" | grep -o "mpy-cross\.static-amd64-linux-${esc_ver}" | head -n1)"
+              if [ -n "$cand" ]; then
+                curl -fL "${IDX##* }/$cand" -o "$OUT"
+                break
+              fi
+            done
+
+            [ -f "$OUT" ] || { echo "No mpy-cross found for $VER"; exit 1; }
+          fi
         fi
-    - name: Build mpy-cross
-      shell: bash
-      run: |
-        cd ${{ inputs.circuitpython-repo-name }}/mpy-cross
-        make clean
-        make
+
+        chmod +x "$OUT"
     - name: Compile MPY files
       shell: bash
       run: |
-        # Store repo name
-        reponame="${{ inputs.circuitpython-repo-name }}"
-
+        echo "Compiling using mpy-cross version ${{ inputs.circuitpy-version }}"
         # Read MPY manifest file contents, if needed
         if [[ "${{ inputs.mpy-manifest-file }}" != "" ]]
         then
@@ -125,7 +140,7 @@ runs:
         # Compile MPY files
         mpyresults=()
         prempyfiles=()
-        pyfiles=$(find ${{ inputs.mpy-directory }} -name "*.py" ! -path "./${{ inputs.circuitpython-repo-name }}/*" ! -name "code.py" -printf '%P\n')
+        pyfiles=$(find ${{ inputs.mpy-directory }} -name "*.py" ! -name "code.py" -printf '%P\n')
         for file in ${pyfiles[@]}
         do
           if [[ "${{ inputs.mpy-manifest-file }}" == "" ]] || \
@@ -137,13 +152,9 @@ runs:
             mpyresults+=("$outputmpy")
             prempyfile="${{ inputs.mpy-directory }}/$file"
             prempyfiles+=("$prempyfile")
-            ${reponame}/mpy-cross/mpy-cross $prempyfile -o $outputmpy
+            ${{ inputs.compiler-directory }}/mpy-cross $prempyfile -o $outputmpy
           fi
         done
-
-        # Delete the CircuitPython repo
-        echo "Deleting CircuitPython repository folder"
-        rm -r ${{ inputs.circuitpython-repo-name }}
 
         # Read ZIP manifest file contents, if needed
         if [[ "${{ inputs.zip-manifest-file }}" != "" ]]
